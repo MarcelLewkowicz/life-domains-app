@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <title>Moje dziedziny życia</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f4f4f5;
+      color: #111827;
+    }
+    h1, h2 {
+      margin: 0;
+    }
+    .app-bar {
+      background: #111827;
+      color: white;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .app-bar button {
+      background: transparent;
+      border: none;
+      color: white;
+      font-size: 16px;
+      padding: 4px 8px;
+    }
+    .container {
+      padding: 16px;
+    }
+    .hint {
+      font-size: 13px;
+      color: #6b7280;
+      margin-bottom: 8px;
+    }
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 10px 12px;
+      box-shadow: 0 2px 6px rgba(15,23,42,0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .card-main {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .card-title {
+      font-weight: 600;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+    }
+    .card-subtitle {
+      font-size: 12px;
+      color: #6b7280;
+    }
+    .card-actions {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      flex-wrap: nowrap;
+    }
+    button.icon {
+      border: none;
+      padding: 4px 6px;
+      border-radius: 8px;
+      font-size: 16px;
+      background: #e5e7eb;
+      min-width: 32px;
+    }
+    button.icon:active {
+      transform: scale(0.96);
+    }
+    .primary-btn {
+      width: 100%;
+      margin-top: 12px;
+      padding: 10px;
+      font-size: 15px;
+      border-radius: 999px;
+      border: none;
+      background: #111827;
+      color: white;
+    }
+    .primary-btn:active {
+      transform: scale(0.98);
+    }
+    #detailView {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- Widok głównych dziedzin -->
+  <div id="mainView">
+    <div class="app-bar">
+      <h1>Dziedziny życia</h1>
+    </div>
+    <div class="container">
+      <p class="hint">
+        Ustaw kolejność dziedzin strzałkami. Na górze – to, co dla Ciebie
+        teraz najważniejsze / najbardziej zaniedbane.
+      </p>
+      <div id="domainsList" class="list"></div>
+      <button class="primary-btn" onclick="addDomain()">+ Dodaj dziedzinę</button>
+    </div>
+  </div>
+
+  <!-- Widok poddziedzin dla wybranej dziedziny -->
+  <div id="detailView">
+    <div class="app-bar">
+      <button onclick="backToMain()">←</button>
+      <h2 id="detailTitle"></h2>
+    </div>
+    <div class="container">
+      <p class="hint">
+        Rozpisz tę dziedzinę na poddziedziny (etapy / obszary) i ustaw ich kolejność.
+      </p>
+      <div id="subdomainsList" class="list"></div>
+      <button class="primary-btn" onclick="addSubdomain()">+ Dodaj poddziedzinę</button>
+    </div>
+  </div>
+
+  <script>
+    let domains = [];
+    let currentDomainId = null;
+
+    function loadData() {
+      const raw = localStorage.getItem('lifeDomains');
+      if (raw) {
+        try {
+          domains = JSON.parse(raw);
+        } catch (e) {
+          domains = [];
+        }
+      } else {
+        domains = [];
+      }
+    }
+
+    function saveData() {
+      localStorage.setItem('lifeDomains', JSON.stringify(domains));
+    }
+
+    function nextOrder(list) {
+      if (!list || list.length === 0) return 1;
+      return Math.max(...list.map(item => item.order || 0)) + 1;
+    }
+
+    // -------- GŁÓWNE DZIEDZINY --------
+    function renderDomains() {
+      const container = document.getElementById('domainsList');
+      container.innerHTML = '';
+
+      const sorted = domains.slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+
+      if (sorted.length === 0) {
+        const p = document.createElement('p');
+        p.className = 'hint';
+        p.textContent = 'Na razie brak dziedzin. Dodaj pierwszą, np. „Matematyka”, „Fizyka”, „Zdrowie”…';
+        container.appendChild(p);
+        return;
+      }
+
+      sorted.forEach(domain => {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        const main = document.createElement('div');
+        main.className = 'card-main';
+
+        const title = document.createElement('div');
+        title.className = 'card-title';
+        title.textContent = domain.name;
+
+        const subtitle = document.createElement('div');
+        subtitle.className = 'card-subtitle';
+        const count = (domain.subdomains || []).length;
+        subtitle.textContent = count > 0
+          ? `Poddziedziny: ${count}`
+          : 'Brak poddziedzin';
+
+        main.appendChild(title);
+        main.appendChild(subtitle);
+
+        const actions = document.createElement('div');
+        actions.className = 'card-actions';
+
+        const upBtn = document.createElement('button');
+        upBtn.className = 'icon';
+        upBtn.textContent = '↑';
+        upBtn.onclick = (e) => {
+          e.stopPropagation();
+          moveDomain(domain.id, 'up');
+        };
+
+        const downBtn = document.createElement('button');
+        downBtn.className = 'icon';
+        downBtn.textContent = '↓';
+        downBtn.onclick = (e) => {
+          e.stopPropagation();
+          moveDomain(domain.id, 'down');
+        };
+
+        const openBtn = document.createElement('button');
+        openBtn.className = 'icon';
+        openBtn.textContent = '→';
+        openBtn.title = 'Otwórz poddziedziny';
+        openBtn.onclick = (e) => {
+          e.stopPropagation();
+          openDomain(domain.id);
+        };
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'icon';
+        deleteBtn.textContent = '🗑';
+        deleteBtn.onclick = (e) => {
+          e.stopPropagation();
+          deleteDomain(domain.id);
+        };
+
+        actions.appendChild(upBtn);
+        actions.appendChild(downBtn);
+        actions.appendChild(openBtn);
+        actions.appendChild(deleteBtn);
+
+        card.appendChild(main);
+        card.appendChild(actions);
+
+        // klik w kartę też otwiera szczegóły
+        card.onclick = () => openDomain(domain.id);
+
+        container.appendChild(card);
+      });
+    }
+
+    function addDomain() {
+      const name = prompt('Podaj nazwę dziedziny (np. Matematyka, Zdrowie):');
+      if (!name || !name.trim()) return;
+      const domain = {
+        id: Date.now().toString() + Math.random().toString(16).slice(2),
+        name: name.trim(),
+        order: nextOrder(domains),
+        subdomains: []
+      };
+      domains.push(domain);
+      saveData();
+      renderDomains();
+    }
+
+    function deleteDomain(id) {
+      if (!confirm('Na pewno usunąć tę dziedzinę wraz z poddziedzinami?')) return;
+      domains = domains.filter(d => d.id !== id);
+      saveData();
+      renderDomains();
+    }
+
+    function moveDomain(id, direction) {
+      const sorted = domains.slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+      const index = sorted.findIndex(d => d.id === id);
+      if (index === -1) return;
+
+      let targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= sorted.length) return;
+
+      const current = sorted[index];
+      const target = sorted[targetIndex];
+
+      const tempOrder = current.order;
+      current.order = target.order;
+      target.order = tempOrder;
+
+      saveData();
+      renderDomains();
+    }
+
+    // -------- PODDZIEDZINY --------
+    function openDomain(id) {
+      currentDomainId = id;
+      const domain = domains.find(d => d.id === id);
+      if (!domain) return;
+      document.getElementById('detailTitle').textContent = domain.name;
+
+      document.getElementById('mainView').style.display = 'none';
+      document.getElementById('detailView').style.display = 'block';
+
+      renderSubdomains();
+    }
+
+    function backToMain() {
+      currentDomainId = null;
+      document.getElementById('detailView').style.display = 'none';
+      document.getElementById('mainView').style.display = 'block';
+      renderDomains();
+    }
+
+    function getCurrentDomain() {
+      return domains.find(d => d.id === currentDomainId);
+    }
+
+    function renderSubdomains() {
+      const domain = getCurrentDomain();
+      const container = document.getElementById('subdomainsList');
+      container.innerHTML = '';
+
+      if (!domain) return;
+
+      const subs = (domain.subdomains || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+
+      if (subs.length === 0) {
+        const p = document.createElement('p');
+        p.className = 'hint';
+        p.textContent = 'Dodaj swoje pierwsze poddziedziny, np. „Sen”, „Dieta”, „Ruch” dla „Zdrowie”.';
+        container.appendChild(p);
+        return;
+      }
+
+      subs.forEach(sub => {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        const main = document.createElement('div');
+        main.className = 'card-main';
+
+        const title = document.createElement('div');
+        title.className = 'card-title';
+        title.textContent = sub.name;
+
+        main.appendChild(title);
+
+        const actions = document.createElement('div');
+        actions.className = 'card-actions';
+
+        const upBtn = document.createElement('button');
+        upBtn.className = 'icon';
+        upBtn.textContent = '↑';
+        upBtn.onclick = () => moveSubdomain(sub.id, 'up');
+
+        const downBtn = document.createElement('button');
+        downBtn.className = 'icon';
+        downBtn.textContent = '↓';
+        downBtn.onclick = () => moveSubdomain(sub.id, 'down');
+
+        const renameBtn = document.createElement('button');
+        renameBtn.className = 'icon';
+        renameBtn.textContent = '✎';
+        renameBtn.onclick = () => renameSubdomain(sub.id);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'icon';
+        deleteBtn.textContent = '🗑';
+        deleteBtn.onclick = () => deleteSubdomain(sub.id);
+
+        actions.appendChild(upBtn);
+        actions.appendChild(downBtn);
+        actions.appendChild(renameBtn);
+        actions.appendChild(deleteBtn);
+
+        card.appendChild(main);
+        card.appendChild(actions);
+
+        container.appendChild(card);
+      });
+    }
+
+    function addSubdomain() {
+      const domain = getCurrentDomain();
+      if (!domain) return;
+      const name = prompt('Nazwa poddziedziny (np. Sen, Dieta, Ruch):');
+      if (!name || !name.trim()) return;
+      const sub = {
+        id: Date.now().toString() + Math.random().toString(16).slice(2),
+        name: name.trim(),
+        order: nextOrder(domain.subdomains || [])
+      };
+      domain.subdomains = domain.subdomains || [];
+      domain.subdomains.push(sub);
+      saveData();
+      renderSubdomains();
+    }
+
+    function moveSubdomain(subId, direction) {
+      const domain = getCurrentDomain();
+      if (!domain) return;
+      const subs = domain.subdomains || [];
+      const sorted = subs.slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+      const index = sorted.findIndex(s => s.id === subId);
+      if (index === -1) return;
+
+      let targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= sorted.length) return;
+
+      const current = sorted[index];
+      const target = sorted[targetIndex];
+
+      const tempOrder = current.order;
+      current.order = target.order;
+      target.order = tempOrder;
+
+      saveData();
+      renderSubdomains();
+    }
+
+    function deleteSubdomain(subId) {
+      const domain = getCurrentDomain();
+      if (!domain) return;
+      if (!confirm('Na pewno usunąć tę poddziedzinę?')) return;
+      domain.subdomains = (domain.subdomains || []).filter(s => s.id !== subId);
+      saveData();
+      renderSubdomains();
+    }
+
+    function renameSubdomain(subId) {
+      const domain = getCurrentDomain();
+      if (!domain) return;
+      const sub = (domain.subdomains || []).find(s => s.id === subId);
+      if (!sub) return;
+      const newName = prompt('Nowa nazwa poddziedziny:', sub.name);
+      if (!newName || !newName.trim()) return;
+      sub.name = newName.trim();
+      saveData();
+      renderSubdomains();
+    }
+
+    // Start
+    loadData();
+    renderDomains();
+  </script>
+</body>
+</html>
